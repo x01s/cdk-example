@@ -36,10 +36,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install AWS CDK
-        run: npm install -g aws-cdk
+      - name: Install AWS CDK & ts-node
+        run: |
+          npm install -g aws-cdk
+          npm install --save-dev ts-node
 
-      - name: Bootstrap CDK (if needed)
+      - name: Build Lambda (TypeScript to JS)
+        run: npm run build:lambda
+
+      - name: CDK Bootstrap (if needed)
         run: cdk bootstrap aws://383033712866/ap-southeast-1
 
       - name: Deploy Hello World Stack
