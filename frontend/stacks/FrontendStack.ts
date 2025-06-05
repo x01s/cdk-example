@@ -15,9 +15,10 @@ export class FrontendStack extends Stack {
 
     this.websiteBucket = new s3.Bucket(this, 'FrontendBucket', {
       websiteIndexDocument: 'index.html',
-      publicReadAccess: false,
+      publicReadAccess: true,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ACLS_ONLY,
     });
 
     this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
@@ -29,7 +30,7 @@ export class FrontendStack extends Stack {
     });
 
     new s3deploy.BucketDeployment(this, 'DeployReactBuild', {
-      sources: [s3deploy.Source.asset(path.join(__dirname, '../../dist'))],
+      sources: [s3deploy.Source.asset(path.join(__dirname, '../out'))],
       destinationBucket: this.websiteBucket,
       distribution: this.distribution,
       distributionPaths: ['/*'],
@@ -41,7 +42,7 @@ export class FrontendStack extends Stack {
       description: 'URL of the deployed React frontend via CloudFront',
     });
 
-    new CfnOutput(this, 'FrontendBucket', {
+    new CfnOutput(this, 'FrontendBucketNameOutput', {
       value: this.websiteBucket.bucketName,
       exportName: 'FrontendStack:ExportsOutputRefFrontendBucket',
     });
