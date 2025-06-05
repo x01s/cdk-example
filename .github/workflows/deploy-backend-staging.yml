@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'backend/**'
+
 jobs:
   deploy:
     name: CDK Deploy (Hello World)
