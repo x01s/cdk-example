@@ -2,7 +2,7 @@
 export async function handler(event: any) {
   return {
     statusCode: 200,
-    body: "Hello from Lambda & CDK!",
+    body: "Hello from Lambda & CDK with CI/CD!",
   };
 }
 
