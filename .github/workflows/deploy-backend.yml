@@ -1,10 +1,11 @@
-name: Deploy CDK Lambda Hello World to Staging
+name: Deploy Backend
 
 on:
   push:
     branches:
       - main
-
+    paths:
+      - 'backend/**'
 jobs:
   deploy:
     name: CDK Deploy (Hello World)
