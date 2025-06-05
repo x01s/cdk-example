@@ -15,9 +15,10 @@ export class FrontendStack extends Stack {
 
     this.websiteBucket = new s3.Bucket(this, 'FrontendBucket', {
       websiteIndexDocument: 'index.html',
-      publicReadAccess: false,
+      publicReadAccess: true,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ACLS_ONLY,
     });
 
     this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
