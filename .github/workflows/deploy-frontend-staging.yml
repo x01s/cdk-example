@@ -49,5 +49,8 @@ jobs:
       - name: Install CDK
         run: npm install -g aws-cdk
 
+      - name: CDK Bootstrap (if needed)
+        run: cdk bootstrap aws://383033712866/ap-southeast-1
+
       - name: Deploy FrontendStack
         run: cdk deploy FrontendStack --require-approval never
