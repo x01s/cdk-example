@@ -9,8 +9,8 @@ export class CdkLambdaDemoStack extends cdk.Stack {
 
     const helloLambda = new lambda.Function(this, 'HelloHandler', {
       runtime: lambda.Runtime.NODEJS_18_X,
-      code: lambda.Code.fromAsset('lambda'),
-      handler: 'hello.handler',
+      code: lambda.Code.fromAsset('dist/lambda'),
+      handler: 'hello.handler'
     });
 
     new apigateway.LambdaRestApi(this, 'Endpoint', {
