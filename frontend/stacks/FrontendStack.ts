@@ -29,7 +29,7 @@ export class FrontendStack extends Stack {
     });
 
     new s3deploy.BucketDeployment(this, 'DeployReactBuild', {
-      sources: [s3deploy.Source.asset(path.join(__dirname, '../dist'))],
+      sources: [s3deploy.Source.asset(path.join(__dirname, '../out'))],
       destinationBucket: this.websiteBucket,
       distribution: this.distribution,
       distributionPaths: ['/*'],
