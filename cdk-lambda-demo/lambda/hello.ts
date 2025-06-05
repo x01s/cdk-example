@@ -1,9 +1,7 @@
 // File: lambda/hello.ts
-export async function handler(event: any) {
+export const handler = async () => {
   return {
     statusCode: 200,
-    body: "Hello from Lambda & CDK with CI/CD!",
+    body: JSON.stringify({message: 'Hello from Lambda!'})
   };
-}
-
-
+};
