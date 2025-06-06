@@ -1,7 +1,10 @@
 import { Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigateway from 'aws-cdk-lib/aws-apigatewayv2';
+import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as cdk from 'aws-cdk-lib';
 
 interface DynamoTableRefs {
   messagesTable: dynamodb.Table;
@@ -14,31 +17,37 @@ interface LambdaStackProps extends StackProps {
 }
 
 export class LambdaStack extends Stack {
+  public readonly apiUrl: cdk.CfnOutput;
+
   constructor(scope: Construct, id: string, props: LambdaStackProps) {
     super(scope, id, props);
 
-    const { messagesTable, threadsTable, connectionsTable } = props.dynamoTables;
+    const { messagesTable } = props.dynamoTables;
 
-    const sharedEnv = {
-      MESSAGES_TABLE: messagesTable.tableName,
-      THREADS_TABLE: threadsTable.tableName,
-      CONNECTIONS_TABLE: connectionsTable.tableName,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '', // optional
-    };
+    const getThreadFn = new lambda.Function(this, 'GetThreadFn', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      code: lambda.Code.fromAsset('lambda'),
+      handler: 'getThread.handler',
+      timeout: Duration.seconds(10),
+      environment: {
+        MESSAGES_TABLE: messagesTable.tableName,
+      },
+    });
 
-    const createFn = (name: string) =>
-      new lambda.Function(this, `${name}Fn`, {
-        runtime: lambda.Runtime.NODEJS_18_X,
-        code: lambda.Code.fromAsset('lambda'),
-        handler: `${name}.handler`,
-        timeout: Duration.seconds(10),
-        environment: sharedEnv,
-      });
+    messagesTable.grantReadData(getThreadFn);
 
-    const helloFn = createFn('hello');
+    const httpApi = new apigateway.HttpApi(this, 'ThreadHttpApi', {
+      apiName: 'GetThreadAPI',
+    });
 
-    messagesTable.grantReadWriteData(helloFn);
-    threadsTable.grantReadWriteData(helloFn);
-    connectionsTable.grantReadWriteData(helloFn);
+    httpApi.addRoutes({
+      path: '/threads/{threadId}',
+      methods: [apigateway.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration('GetThreadIntegration', getThreadFn),
+    });
+
+    this.apiUrl = new cdk.CfnOutput(this, 'GetThreadApiUrl', {
+      value: httpApi.apiEndpoint,
+    });
   }
 }

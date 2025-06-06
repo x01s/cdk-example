@@ -1,73 +1,82 @@
-import { ApiGatewayManagementApi, DynamoDB } from 'aws-sdk';
-import { OpenAI } from 'openai';
+import { DynamoDB, ApiGatewayManagementApi } from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const dynamo = new DynamoDB.DocumentClient();
-const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME!;
+const messagesTable = process.env.MESSAGES_TABLE!;
+const connectionsTable = process.env.CONNECTIONS_TABLE!;
 
 export const handler = async (event: any) => {
-  const { requestContext, body } = event;
-  const connectionId = requestContext.connectionId;
-  const domainName = requestContext.domainName;
-  const stage = requestContext.stage;
+  const connectionId = event.requestContext.connectionId;
+  const domainName = event.requestContext.domainName;
+  const stage = event.requestContext.stage;
 
-  const apiGateway = new ApiGatewayManagementApi({
+  const apigw = new ApiGatewayManagementApi({
     endpoint: `${domainName}/${stage}`,
   });
 
-  let messageText = 'Hello';
-  let threadId = 'default-thread';
-  let sender = 'anonymous';
-
   try {
-    const message = JSON.parse(body);
-    messageText = message.text || 'Hello';
-    threadId = message.threadId || 'default-thread';
-    sender = message.sender || 'anonymous';
-  } catch (err) {
-    console.error('Invalid JSON:', body);
-  }
+    const { threadId, senderId, text } = JSON.parse(event.body).payload;
 
-  try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: messageText }],
-    });
+    if (!threadId || !senderId || !text) {
+      return { statusCode: 400, body: 'Missing fields' };
+    }
 
-    const reply = completion.choices[0]?.message.content || 'Sorry, I have no response.';
     const createdAt = new Date().toISOString();
     const messageId = uuidv4();
 
     await dynamo.put({
-      TableName: MESSAGES_TABLE,
+      TableName: messagesTable,
       Item: {
         messageId,
         threadId,
-        sender,
-        content: messageText,
-        reply,
+        senderId,
+        text,
         createdAt,
       },
     }).promise();
 
-    await apiGateway.postToConnection({
-      ConnectionId: connectionId,
-      Data: JSON.stringify({ reply, messageId, createdAt }),
+    // 2. Query all connections (broadcast to all)
+    const connections = await dynamo.scan({
+      TableName: connectionsTable,
     }).promise();
 
-    return { statusCode: 200 };
-  } catch (error) {
-    console.error('Chat error:', error);
+    const messageToSend = JSON.stringify({
+      type: 'chat',
+      payload: {
+        messageId,
+        threadId,
+        senderId,
+        text,
+        createdAt,
+      },
+    });
 
-    await apiGateway.postToConnection({
-      ConnectionId: connectionId,
-      Data: JSON.stringify({ error: 'Failed to get reply from ChatGPT' }),
-    }).promise();
+    const postTasks = (connections.Items || []).map(async (conn: any) => {
+      try {
+        await apigw.postToConnection({
+          ConnectionId: conn.connectionId,
+          Data: messageToSend,
+        }).promise();
+      } catch (err) {
+        if ((err as any).statusCode === 410) {
+          // stale connection — optional: remove from DB
+        } else {
+          console.error('Failed to post to', conn.connectionId, err);
+        }
+      }
+    });
 
-    return { statusCode: 500 };
+    await Promise.all(postTasks);
+
+    return {
+      statusCode: 200,
+      body: 'Message sent',
+    };
+  } catch (err) {
+    console.error('chat.ts error:', err);
+    return {
+      statusCode: 500,
+      body: 'Internal error',
+    };
   }
 };
