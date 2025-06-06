@@ -1,4 +1,4 @@
-import { Stack, StackProps } from 'aws-cdk-lib';
+import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
@@ -24,6 +24,21 @@ export class DynamoDBStack extends Stack {
     this.connectionsTable = new dynamodb.Table(this, 'Connections', {
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    });
+
+    new CfnOutput(this, 'ThreadsTableName', {
+      value: this.threadsTable.tableName,
+      exportName: 'ThreadsTableName',
+    });
+
+    new CfnOutput(this, 'MessagesTableName', {
+      value: this.messagesTable.tableName,
+      exportName: 'MessagesTableName',
+    });
+
+    new CfnOutput(this, 'ConnectionsTableName', {
+      value: this.connectionsTable.tableName,
+      exportName: 'ConnectionsTableName',
     });
   }
 }

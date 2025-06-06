@@ -1,10 +1,9 @@
-import { Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { Stack, StackProps, Duration, aws_secretsmanager as secretsmanager, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as cdk from 'aws-cdk-lib';
 
 interface DynamoTableRefs {
   messagesTable: dynamodb.Table;
@@ -24,43 +23,56 @@ export class WebSocketStack extends Stack {
 
     const { messagesTable, threadsTable, connectionsTable } = props.dynamoTables;
 
-    const sharedLambdaEnv = {
+    const openAiSecret = secretsmanager.Secret.fromSecretNameV2(this, 'OpenAiApiKeySecret', 'OpenAIApiKey');
+
+    const sharedEnv = {
       MESSAGES_TABLE: messagesTable.tableName,
       THREADS_TABLE: threadsTable.tableName,
       CONNECTIONS_TABLE: connectionsTable.tableName,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '', // optional if using secret manager later
+      OPENAI_API_KEY_SECRET_NAME: openAiSecret.secretName,
     };
 
-    const createFn = (name: string) =>
-      new lambda.Function(this, `${name}Fn`, {
+    const routeConfigs = [
+      { name: 'connect', routeKey: '$connect' },
+      { name: 'disconnect', routeKey: '$disconnect' },
+      { name: 'message', routeKey: '$default' },
+      { name: 'chat', routeKey: 'chat' },
+    ];
+
+    const lambdaMap: Record<string, lambda.Function> = {};
+
+    for (const { name } of routeConfigs) {
+      const fn = new lambda.Function(this, `${name}Fn`, {
         runtime: lambda.Runtime.NODEJS_18_X,
         code: lambda.Code.fromAsset('lambda'),
         handler: `${name}.handler`,
         timeout: Duration.seconds(10),
-        environment: sharedLambdaEnv,
+        environment: sharedEnv,
       });
 
-    const connectFn = createFn('connect');
-    const disconnectFn = createFn('disconnect');
-    const messageFn = createFn('message');
-    const chatFn = createFn('chat');
-
-    for (const fn of [connectFn, disconnectFn, messageFn, chatFn]) {
       messagesTable.grantReadWriteData(fn);
       threadsTable.grantReadWriteData(fn);
       connectionsTable.grantReadWriteData(fn);
+
+      openAiSecret.grantRead(fn);
+
+      lambdaMap[name] = fn;
     }
 
     this.webSocketApi = new apigateway.WebSocketApi(this, 'ChatWebSocketApi', {
       connectRouteOptions: {
-        integration: new integrations.WebSocketLambdaIntegration('ConnectIntegration', connectFn),
+        integration: new integrations.WebSocketLambdaIntegration('ConnectIntegration', lambdaMap['connect']),
       },
       disconnectRouteOptions: {
-        integration: new integrations.WebSocketLambdaIntegration('DisconnectIntegration', disconnectFn),
+        integration: new integrations.WebSocketLambdaIntegration('DisconnectIntegration', lambdaMap['disconnect']),
       },
       defaultRouteOptions: {
-        integration: new integrations.WebSocketLambdaIntegration('DefaultIntegration', messageFn),
+        integration: new integrations.WebSocketLambdaIntegration('DefaultIntegration', lambdaMap['message']),
       },
+    });
+
+    this.webSocketApi.addRoute('chat', {
+      integration: new integrations.WebSocketLambdaIntegration('ChatIntegration', lambdaMap['chat']),
     });
 
     new apigateway.WebSocketStage(this, 'ChatWebSocketStage', {
@@ -69,7 +81,7 @@ export class WebSocketStack extends Stack {
       autoDeploy: true,
     });
 
-    new cdk.CfnOutput(this, 'WebSocketURL', {
+    new CfnOutput(this, 'WebSocketURL', {
       value: this.webSocketApi.apiEndpoint,
     });
   }
