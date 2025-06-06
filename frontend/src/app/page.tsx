@@ -34,8 +34,8 @@ export default function ChatPage() {
             },
           ]);
         }
-      } catch (_) {
-        console.error('[WebSocket] Failed to parse message:', event.data);
+      } catch (error) {
+        console.error('[WebSocket] Failed to parse message:', event.data, error);
       }
     };
 
