@@ -34,7 +34,7 @@ export default function ChatPage() {
             },
           ]);
         }
-      } catch (err) {
+      } catch (_) {
         console.error('[WebSocket] Failed to parse message:', event.data);
       }
     };
@@ -48,7 +48,6 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Auto scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
